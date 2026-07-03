@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TICKER — don't let it break</title>
+<style>
+  @font-face {
+    font-family: "Press Start 2P";
+    src: url("fonts/press-start-2p.woff2") format("woff2");
+    font-display: swap;
+  }
+  /* ink brightened to compensate for the ~36% glass tint above the screen */
+  :root { --panic: 0; --lcd-ink: #eaffc8; --lcd-dim: #7d9163; --lcd-bg: #10140c; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #f2f2f4;
+    display: grid; place-items: center;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    overflow: hidden;
+  }
+  /* panic vignette — the room heats up with the heart */
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 58%, rgba(255,40,40,.26) 125%);
+    opacity: var(--panic); transition: opacity 1.2s ease;
+  }
+  #device { position: relative; height: min(72vh, 52vw); aspect-ratio: 1536 / 1024; margin-top: -2vh; }
+  #shell { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 3; pointer-events: none;
+           filter: drop-shadow(0 30px 50px rgba(120,10,10,.28)); }
+  /* screen sits UNDER the shell and glows through the photo's translucent
+     glass (real corners/frame/reflection). Glass zone: 32.1/23.54/35.35/39.06%;
+     div overshoots slightly — overflow hides behind the opaque shell. */
+  #screen {
+    position: absolute; left: 31.6%; top: 23%; width: 36.4%; height: 40.2%;
+    background: var(--lcd-bg); z-index: 2;
+    display: flex; flex-direction: column; padding: 3.5% 4.5% 3%;
+    color: var(--lcd-ink); text-transform: uppercase;
+    font-family: "Press Start 2P", ui-monospace, monospace;
+  }
+  #screen::before { /* subtle inner shadow only — the photo's real glass now provides the reflection */
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+    box-shadow: inset 0 0 22px rgba(0,0,0,.4);
+  }
+  #screen::after { /* scanlines */
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+    background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.18) 2px 3px);
+  }
+  #topbar { display: flex; justify-content: space-between; font-size: clamp(7px, 1.1vh, 11px); color: var(--lcd-dim); }
+  #topbar #score { color: var(--lcd-ink); font-weight: 700; }
+  /* Ticker stands on a floor, 8-bit style — no floating */
+  #stage { flex: 1; position: relative; display: grid; justify-items: center; align-items: end;
+           padding-bottom: 7%; }
+  #stage::before { /* pixel ground line under his feet */
+    content: ""; position: absolute; bottom: 6.2%; left: 26%; width: 48%; height: 2px;
+    background: repeating-linear-gradient(90deg, var(--lcd-dim) 0 8px, transparent 8px 14px);
+    opacity: .8;
+  }
+  #ekg { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; }
+  /* Ticker himself — real sprite frames do ALL the motion; no CSS movement.
+     Filter mutes him into the phosphor screen: desaturated, dimmed, lit green
+     by the LCD instead of glowing on his own. */
+  #heart { position: relative; height: 64%; z-index: 2; image-rendering: pixelated;
+           filter: saturate(.78) brightness(.88) contrast(.96)
+                   drop-shadow(0 0 12px rgba(205,232,171,.16)); }
+  #heart.dead { filter: saturate(.5) brightness(.72) drop-shadow(0 0 6px rgba(120,120,120,.25)); }
+  #heart.dread { filter: saturate(.7) brightness(1.02) drop-shadow(0 0 14px rgba(230,255,200,.28)); }
+  /* full-screen LCD flash for the big moments */
+  #flash { position: absolute; inset: 0; z-index: 4;
+           display: flex; align-items: center; justify-content: center; text-align: center;
+           font-size: clamp(13px, 3.2vh, 30px); opacity: 0; pointer-events: none; }
+  #flash img { height: 38%; image-rendering: pixelated; filter: drop-shadow(0 0 14px rgba(234,255,200,.35)); }
+  .hbico { height: .95em; image-rendering: pixelated; vertical-align: -0.08em; margin-right: .35em; }
+  #flash.go { animation: flashIn 2.2s ease-out; }
+  @keyframes flashIn { 0% { opacity: 0; } 8% { opacity: 1; scale: 1.15; } 30% { opacity: 1; scale: 1; } 100% { opacity: 0; } }
+  /* contextual button prompt — the screen teaches the buttons, Game Boy style */
+  #prompt { position: absolute; left: 0; right: 0; bottom: 26%; text-align: center;
+            font-size: clamp(8px, 1.4vh, 13px); color: var(--lcd-ink); z-index: 4;
+            animation: blink 0.9s steps(1) infinite; }
+  #prompt:empty { display: none; }
+  @keyframes blink { 50% { opacity: .15; } }
+  #bottombar { display: flex; justify-content: space-between; align-items: baseline; gap: 3%; }
+  #hrwrap { font-size: clamp(11px, 2.2vh, 21px); }
+  #hrwrap span { font-size: .5em; color: var(--lcd-dim); }
+  #stateword { font-size: clamp(9px, 1.7vh, 16px); }
+  #note { font-size: clamp(6px, 1vh, 9px); color: var(--lcd-dim); white-space: nowrap; overflow: hidden;
+          text-overflow: ellipsis; text-transform: none; padding-top: 1.6%; }
+  /* physical buttons -> clickable hitboxes with press feedback + printed caps */
+  .btn { position: absolute; z-index: 4; width: 9.5%; aspect-ratio: 1; border-radius: 50%; cursor: pointer;
+         background: transparent; border: none;
+         font-family: "Press Start 2P", monospace; font-size: clamp(10px, 1.9vh, 18px);
+         color: rgba(70, 8, 10, .55); text-shadow: 0 1px 0 rgba(255,150,150,.25); }
+  .btn:active { background: radial-gradient(circle, rgba(0,0,0,.35) 0 55%, transparent 60%); transform: translateY(1.5%); }
+  #btnA { left: 35.6%; top: 66.8%; }
+  #btnB { left: 53.6%; top: 66.8%; }
+  #btnMute { position: absolute; z-index: 4; left: 45.8%; top: 79%; width: 8.4%; aspect-ratio: 1.2;
+             background: transparent; border: none; border-radius: 30%; cursor: pointer; }
+  /* LCD boot screen */
+  #boot { position: absolute; inset: 0; z-index: 6; background: var(--lcd-bg);
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 3.5%; padding: 5%; }
+  #boot[hidden] { display: none; } /* author display beats the hidden attr — restore it */
+  #boot .btitle { font-size: clamp(15px, 2.8vh, 28px); letter-spacing: .2em; }
+  #boot img { height: 26%; image-rendering: pixelated;
+              filter: saturate(.78) brightness(.88) drop-shadow(0 0 10px rgba(205,232,171,.15)); }
+  #boot .bmenu { width: 100%; font-size: clamp(7px, 1.15vh, 11px); line-height: 2.1; color: var(--lcd-dim); }
+  #boot .bmenu .sel { color: var(--lcd-ink); }
+  #boot .brow { display: flex; justify-content: space-between; }
+  #boot .bside { font-size: clamp(8px, 1.3vh, 12px); color: var(--lcd-ink); }
+  #boot .bprompt { font-size: clamp(6px, 1vh, 9px); color: var(--lcd-dim);
+                   animation: blink .9s steps(1) infinite; }
+  #btnA.alert { animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 26px 8px rgba(255,60,60,.75); } }
+  #hint { position: fixed; bottom: 2.2vh; width: 100%; text-align: center; color: #9a9dab;
+          font-size: clamp(10px, 1.5vh, 13px); letter-spacing: .12em; text-transform: uppercase; }
+  #brand { position: fixed; top: 2.4vh; width: 100%; text-align: center; color: #2d2f3a; }
+  #brand h1 { font-family: "Press Start 2P", monospace; font-size: clamp(13px, 2.2vh, 20px); letter-spacing: .3em; }
+  #brand p { font-size: clamp(10px, 1.4vh, 13px); color: #9a9dab; letter-spacing: .08em; margin-top: 1vh; }
+  #teampick { position: fixed; top: 8.6vh; width: 100%; text-align: center; color: #9a9dab; font-size: clamp(10px,1.4vh,13px); }
+  #teampick b { color: #3b3e4a; cursor: pointer; }
+  /* wallet pill (top-right, quiet) */
+  #wallet { position: fixed; top: 2.4vh; right: 2vw; font-size: clamp(9px, 1.3vh, 12px);
+            color: #6a7080; background: #fff; border: 1px solid #e3e4ea; border-radius: 999px;
+            padding: .55em 1em; box-shadow: 0 2px 8px rgba(30,30,50,.05); }
+  #wallet::before { content: "●"; color: #2fbf71; margin-right: .5em; font-size: .8em; }
+  /* match chips row */
+  #chips { position: fixed; bottom: 6.4vh; width: 100%; display: flex; justify-content: center; gap: .8vw; }
+  .chip { font-family: "Press Start 2P", monospace; font-size: clamp(7px, 1.05vh, 10px);
+          padding: 1.1em 1.4em; border-radius: 10px; border: 1px solid #e3e4ea; background: #fff;
+          color: #3b3e4a; cursor: pointer; text-align: center; line-height: 1.7;
+          box-shadow: 0 2px 10px rgba(30,30,50,.05); }
+  .chip small { display: block; color: #9a9dab; font-size: .82em; }
+  .chip.active { background: #c8302e; border-color: #c8302e; color: #fff; }
+  .chip.active small { color: rgba(255,255,255,.75); }
+  /* full-time report card: floats over the device's lower-right corner */
+  #card { position: absolute; right: -10%; bottom: 2%; width: 46%; z-index: 6;
+          background: #fff; border-radius: 16px; padding: 4% 4.5%;
+          box-shadow: 0 18px 50px rgba(60,20,20,.18), 0 2px 10px rgba(30,30,50,.08);
+          opacity: 0; translate: 0 24px; pointer-events: none;
+          transition: opacity .5s ease, translate .5s ease; }
+  #card.show { opacity: 1; translate: 0 0; pointer-events: auto; }
+  #card .head { display: flex; align-items: center; gap: 5%; }
+  #card .head img { width: 17%; image-rendering: pixelated; background: #f4f4f6; border-radius: 10px; padding: 1.5%; }
+  #card .head .score { font-family: "Press Start 2P", monospace; font-size: clamp(11px, 1.9vh, 18px); color: #23252e; flex: 1; }
+  #card .head .mini { color: #c8302e; font-size: clamp(12px, 1.8vh, 16px); }
+  #card canvas { width: 100%; height: 44px; margin-top: 4%; background: #f7f8f5;
+                 border: 1px solid #e6e8e2; border-radius: 8px; }
+  #card .stats { display: flex; margin-top: 4%; }
+  #card .stats div { flex: 1; text-align: center; border-left: 1px solid #ececf0; }
+  #card .stats div:first-child { border-left: 0; }
+  #card .stats b { display: block; font-family: "Press Start 2P", monospace; font-size: clamp(10px, 1.7vh, 16px); color: #23252e; }
+  #card .stats span { font-size: clamp(6px, .95vh, 9px); color: #9a9dab; letter-spacing: .08em; text-transform: uppercase; }
+  #card .foot { display: flex; justify-content: space-between; margin-top: 4.5%;
+                font-family: "Press Start 2P", monospace; font-size: clamp(7px, 1.1vh, 10px); }
+  #card .foot .fate { color: #3b3e4a; text-transform: lowercase; }
+  #card .foot .tag { color: #c8302e; }
+</style>
+</head>
+<body>
+  <div id="device">
+    <div id="screen">
+      <div id="topbar"><span id="score">BEL 0-0 SEN</span><span id="hbcount"></span><span id="clock">00'</span></div>
+      <div id="stage">
+        <canvas id="ekg"></canvas>
+        <img id="heart" src="../assets/sprites/worried.png" alt="Ticker" />
+        <div id="flash"></div>
+      </div>
+      <div id="prompt"></div>
+      <div id="bottombar"><span id="hrwrap"><span id="hrnum">--</span> <span>BPM</span></span><span id="stateword">BOOT</span></div>
+      <div id="note">connecting to match…</div>
+      <div id="boot" hidden>
+        <div class="btitle">TICKER</div>
+        <img src="../assets/sprites/worried.png" alt="" />
+        <div class="bmenu" id="bootMenu"></div>
+        <div class="bside" id="bootSide" hidden></div>
+        <div class="bprompt" id="bootPrompt">B · MOVE &nbsp;&nbsp; A · SELECT</div>
+      </div>
+    </div>
+    <img id="shell" src="../assets/shell.png" alt="Ticker device" />
+    <button id="btnA" class="btn" title="A — select / calm / revive">A</button>
+    <button id="btnB" class="btn" title="B — move / speed">B</button>
+    <button id="btnMute" title="sound on/off"></button>
+    <div id="card">
+      <div class="head"><img id="cardFace" src="../assets/sprites/stitched.png" alt="" /><span class="score" id="cardScore">— 0-0 —</span><span class="mini">&lt;/3</span></div>
+      <canvas id="cardEkg"></canvas>
+      <div class="stats">
+        <div><b id="stPeak">—</b><span>peak bpm</span></div>
+        <div><b id="stDanger">—</b><span>time in danger</span></div>
+        <div><b id="stBreaks">—</b><span>heartbreaks</span></div>
+        <div><b id="stRevives">—</b><span>revives</span></div>
+      </div>
+      <div class="foot"><span class="fate" id="cardFate">…</span><span class="tag">#TICKER</span></div>
+    </div>
+  </div>
+  <div id="wallet">connected · devnet</div>
+  <div id="chips"></div>
+  <div id="brand"><h1>TICKER</h1><p>your team plays. your heart takes the damage. don't let it break.</p></div>
+  <div id="teampick">SUPPORTING: <b id="teamName">P1</b> (click to switch side & restart)</div>
+  <div id="hint">A = REVIVE · B = SPEED ×<span id="spd">90</span> · <span id="mode">REPLAY: BELGIUM 3–2 SENEGAL (REAL MATCH DATA)</span></div>
+
+<script type="module">
+import { TickerEngine } from "../engine/ticker-engine.mjs";
+import { normalizeEvent, scoreTotals } from "../lib/txline/events.mjs";
+
+/* ---------- Ticker sprite: engine state -> frame ---------- */
+const heartEl = document.getElementById("heart");
+const SPRITE = (name) => `../assets/sprites/${name}.png`;
+// states with REAL animation frames (assets/sprites/anim/<state>/<n>.png)
+// frames: which files to use (lets us drop off-model frames); mode 'hr' ties
+// the cycle to heart rate (breathing), otherwise fixed ms per full cycle
+const ANIM = {
+  worried:  { frames: [0, 1, 2, 3, 4], mode: "hr" },
+  panic:    { frames: [0, 1, 2, 3, 4], ms: 550 },
+  sleepy:   { frames: [0, 1, 2, 3, 4], ms: 2800 },
+  euphoria: { frames: [0, 1, 4], ms: 850 },
+  stitched: { frames: [0, 1, 2, 3, 4], mode: "hr" },
+  broken:   { frames: [0, 1, 2], ms: 2600 },     // weak dying flicker
+  // dread has NO animation on purpose — the freeze is the drama
+};
+/* ---------- scarf team colors: runtime palette swap ----------
+   One sprite set serves all 48 World Cup teams: the scarf's blue stripes are
+   detected per-pixel and re-dyed to the supported team's color (luminance kept,
+   so shading survives). White stripes / eye whites are untouched. */
+// primary dyes the blue stripes; secondary dyes the WHITE stripes (kit/flag trim).
+// Eye whites are safe: whites only get dyed in the lower half of the sprite.
+const TEAM_COLORS = {
+  1: { p: [214, 40, 40], s: [247, 181, 0] },   // Belgium: red / yellow
+  2: { p: [10, 132, 66], s: [252, 209, 22] },  // Senegal: green / yellow
+};
+const RECOLORED = new Map(); // originalURL -> dataURL in team color
+function recolorInto(url, { p: [tr, tg, tb], s: [sr, sg, sb] }) {
+  const img = new Image();
+  img.onload = () => {
+    const cv = document.createElement("canvas");
+    cv.width = img.width; cv.height = img.height;
+    const c = cv.getContext("2d");
+    c.drawImage(img, 0, 0);
+    const d = c.getImageData(0, 0, cv.width, cv.height);
+    const p = d.data;
+    for (let i = 0; i < p.length; i += 4) {
+      if (!p[i + 3]) continue;
+      const r = p[i], g = p[i + 1], b = p[i + 2];
+      const y = Math.floor(i / 4 / cv.width);
+      // scarf blue: strongly blue-dominant, not bright (sweat drops are bright)
+      if (b > 110 && b - r > 50 && b - g > 25 && r < 150) {
+        const f = Math.max(0.35, Math.min(1.7, (0.3 * r + 0.6 * g + 0.1 * b) / 95));
+        p[i] = Math.min(255, tr * f); p[i + 1] = Math.min(255, tg * f); p[i + 2] = Math.min(255, tb * f);
+      // scarf white: near-white in the LOWER half only (eyes live up top)
+      } else if (r > 195 && g > 195 && b > 195 && y > cv.height * 0.52) {
+        const f = (0.3 * r + 0.6 * g + 0.1 * b) / 255;
+        p[i] = Math.min(255, sr * f); p[i + 1] = Math.min(255, sg * f); p[i + 2] = Math.min(255, sb * f);
+      }
+    }
+    c.putImageData(d, 0, 0);
+    RECOLORED.set(url, cv.toDataURL());
+  };
+  img.src = url;
+}
+const P = new URLSearchParams(location.search);
+const hex = (h) => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+// scarf colors: ?pc=RRGGBB&sc=RRGGBB override, else team map
+const teamColor = P.get("pc")
+  ? { p: hex(P.get("pc")), s: P.get("sc") ? hex(P.get("sc")) : [245, 245, 245] }
+  : (TEAM_COLORS[Number(P.get("team") ?? 1)] ?? TEAM_COLORS[1]);
+const ALL_SPRITE_URLS = [
+  ...["worried","panic","dread","broken","sleepy","stitched","euphoria"].map(SPRITE),
+  ...Object.entries(ANIM).flatMap(([s, a]) => a.frames.map((i) => `../assets/sprites/anim/${s}/${i}.png`)),
+];
+ALL_SPRITE_URLS.forEach((u) => recolorInto(u, teamColor));
+const spriteURL = (u) => RECOLORED.get(u) ?? u; // fallback to original until dyed
+function spriteFor(snap) {
+  switch (snap.state) {
+    case "panic": return "panic";
+    case "dread": return "dread";
+    case "fainted": return "broken";
+    case "euphoria": case "hype": return "euphoria";
+    case "sleepy": return "sleepy";
+    default: return snap.revives > 0 ? "stitched" : "worried"; // scars persist after a revive
+  }
+}
+// real pixel animation: cycle frames, breathing speeds up with heart rate
+let currentSprite = "worried";
+function tickSprite(tms) {
+  const a = ANIM[currentSprite];
+  if (a) {
+    const cycleMs = a.mode === "hr" ? Math.max(700, Math.min(3500, 2400 * 70 / curHR)) : a.ms;
+    const idx = a.frames[Math.floor((tms % cycleMs) / (cycleMs / a.frames.length))] ?? a.frames[0];
+    heartEl.src = spriteURL(`../assets/sprites/anim/${currentSprite}/${idx}.png`);
+  } else {
+    heartEl.src = spriteURL(SPRITE(currentSprite));
+  }
+  requestAnimationFrame(tickSprite);
+}
+requestAnimationFrame(tickSprite);
+
+const $ = (id) => document.getElementById(id);
+const els = { score: $("score"), clock: $("clock"), hr: $("hrnum"), state: $("stateword"), note: $("note"),
+              spd: $("spd"), team: $("teamName"), btnA: $("btnA"), flash: $("flash"), hb: $("hbcount"),
+              prompt: $("prompt") };
+
+/* ---------- EKG ---------- */
+const cv = $("ekg"), ctx = cv.getContext("2d");
+let ekgX = 0, lastBeatAt = 0, flat = false, prevY = 0, curHR = 70;
+function sizeCanvas() { cv.width = cv.clientWidth * devicePixelRatio; cv.height = cv.clientHeight * devicePixelRatio; prevY = cv.height / 2; }
+sizeCanvas(); addEventListener("resize", sizeCanvas);
+function drawEKG(tms) {
+  const w = cv.width, h = cv.height, mid = h * 0.5;
+  ctx.fillStyle = "rgba(18,22,14,0.16)"; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#eaffc8"; ctx.lineWidth = Math.max(1.5, h * 0.014);
+  const beatEvery = 60000 / curHR;
+  let y = mid;
+  if (!flat && tms - lastBeatAt > beatEvery) lastBeatAt = tms;
+  const ph = (tms - lastBeatAt) / beatEvery;
+  if (!flat && ph < 0.18) {
+    const k = ph / 0.18;
+    y = mid - Math.sin(k * Math.PI) * h * 0.34 * Math.min(1.4, curHR / 110);
+    if (ph > 0.12) y = mid + Math.sin((k - 0.66) * Math.PI) * h * 0.1;
+  }
+  ctx.beginPath(); ctx.moveTo(ekgX, prevY); ctx.lineTo(ekgX + w * 0.006, y); ctx.stroke();
+  prevY = y; ekgX += w * 0.006;
+  if (ekgX >= w) { ekgX = 0; prevY = mid; }
+  requestAnimationFrame(drawEKG);
+}
+requestAnimationFrame(drawEKG);
+
+/* ---------- big-moment flash ---------- */
+function flash(content, color) {
+  els.flash.innerHTML = content; // text or an <img> pixel icon
+  els.flash.style.color = color;
+  els.flash.classList.remove("go"); void els.flash.offsetWidth; // restart animation
+  els.flash.classList.add("go");
+}
+const BROKEN_ICON = `<img src="../assets/icons/broken.png" alt="broken heart" />`;
+
+/* ---------- replay + engine ---------- */
+const params = new URLSearchParams(location.search);
+let team = Number(params.get("team") ?? 1);
+let speed = 90;
+const SPEEDS = [30, 90, 300];
+const engine = new TickerEngine({ team });
+let lastTs = 0;
+
+els.team.textContent = team === 1 ? "BELGIUM (P1)" : "SENEGAL (P2)";
+els.team.onclick = () => { // switch side, KEEP mode/fixture (bug fix)
+  const q = new URLSearchParams(location.search);
+  q.set("team", team === 1 ? 2 : 1);
+  location.search = q.toString();
+};
+
+/* ---------- 8-bit audio: WebAudio synth, no assets ---------- */
+let AC = null, muted = false;
+function initAudio() { if (!AC && !muted) { AC = new AudioContext(); beatLoop(); } }
+function tone(f, dur, type = "sine", gain = 0.2, when = 0, slideTo = 0) {
+  if (!AC || muted) return;
+  const t0 = AC.currentTime + when;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t0);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(30, slideTo), t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(gain, t0 + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(AC.destination);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+const blip = (f = 660, d = 0.05) => tone(f, d, "square", 0.09);
+const calmSound = () => tone(420, 0.4, "sine", 0.14, 0, 140);
+const reviveSound = () => [330, 392, 523].forEach((f, i) => tone(f, 0.12, "square", 0.11, i * 0.09));
+const goalSound = () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, "square", 0.12, i * 0.1));
+const breakSound = () => { tone(392, 0.3, "sawtooth", 0.12); tone(311, 0.45, "sawtooth", 0.12, 0.25); tone(196, 0.9, "sawtooth", 0.1, 0.6); };
+function beatLoop() { // lub-dub at the live BPM; silent while flatlined
+  if (!AC) return;
+  const period = 60 / Math.max(45, curHR);
+  if (!muted && !flat) { tone(56, 0.09, "sine", 0.5); tone(48, 0.08, "sine", 0.34, period * 0.18); }
+  setTimeout(beatLoop, period * 1000);
+}
+$("btnMute").onclick = () => { muted = !muted; if (!muted) initAudio(); flash(muted ? "SOUND OFF" : "SOUND ON", "#8ea27a"); };
+
+/* ---------- buttons ---------- */
+$("btnB").onclick = () => {
+  initAudio(); blip(520);
+  if (BOOT) { bootB(); return; }
+  speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; els.spd.textContent = speed;
+};
+els.btnA.onclick = async () => {
+  initAudio();
+  if (BOOT) { blip(740); bootA(); return; }
+  if (engine.snapshot().state === "fainted") {
+    els.prompt.textContent = "PAYING FEE…";
+    let sig = null;
+    try { const r = await fetch("/revive-fee", { method: "POST" }); if (r.ok) sig = (await r.json()).signature; } catch {}
+    if (engine.revive(lastTs)) {
+      flash("STITCHED UP", "#eaffc8"); reviveSound(); navigator.vibrate?.(80);
+      els.note.textContent = sig ? `fee paid on devnet · ${sig.slice(0, 8)}…` : "revived (fee skipped — devnet hiccup)";
+      render(engine.snapshot());
+    }
+  } else {
+    const res = engine.calm(lastTs);
+    if (res === true) { flash("breathe…", "#8ea27a"); calmSound(); render(engine.snapshot()); navigator.vibrate?.(30); }
+    else if (res === "cooldown") flash("…still catching its breath…", "#8ea27a");
+    else blip(180, 0.05);
+  }
+};
+
+const STATE_WORD = {
+  idle: "STEADY", nervous: "NERVOUS", panic: "PANIC!!", hype: "HYPE",
+  dread: "…VAR…", fainted: "BROKEN", euphoria: "GOAL!!!", sleepy: "zzz",
+};
+let prevState = null;
+
+function render(snap) {
+  curHR = Math.max(40, snap.heartRate);
+  els.hr.textContent = snap.heartRate;
+  els.state.textContent = STATE_WORD[snap.state] ?? snap.state;
+  const lastLog = engine.log.at(-1); if (lastLog?.note) els.note.textContent = lastLog.note;
+  currentSprite = spriteFor(snap);
+  heartEl.className = snap.state === "fainted" ? "dead" : snap.state === "dread" ? "dread" : "";
+  flat = snap.state === "dread" || snap.state === "fainted";
+  const needsCalm = ["panic", "nervous", "hype"].includes(snap.state) && snap.heartRate >= 140;
+  els.btnA.classList.toggle("alert", snap.state === "fainted" || needsCalm);
+  els.prompt.textContent = snap.state === "fainted" ? "PRESS A · REVIVE"
+    : needsCalm ? "A · CALM IT DOWN" : "";
+  els.hb.innerHTML = snap.heartbreaks
+    ? `<img class="hbico" src="../assets/icons/broken.png" alt="" />x${snap.heartbreaks}` : "";
+  const panic = Math.min(1, Math.max(0, (snap.heartRate - 95) / 80));
+  document.documentElement.style.setProperty("--panic", panic.toFixed(2));
+  if (snap.state !== prevState) {
+    if (snap.state === "euphoria") { flash("GOOOAL!!!", "#eaffc8"); goalSound(); }
+    else if (snap.state === "fainted") { flash(BROKEN_ICON, "#ff6a5e"); breakSound(); }
+    else if (snap.state === "dread") { flash("VAR…", "#8ea27a"); tone(880, 0.5, "sine", 0.05); }
+    prevState = snap.state;
+  }
+}
+
+let P1NAME = "BEL", P2NAME = "SEN";
+let hrHistory = [], peakHR = 0, lastScoreTxt = "0-0", cardShown = false;
+function applyEvent(ev) {
+  lastTs = ev.ts;
+  const snap = engine.update(ev);
+  hrHistory.push(snap.heartRate);
+  if (snap.heartRate > peakHR) peakHR = snap.heartRate;
+  if (ev.score) {
+    const t = scoreTotals(ev.score);
+    lastScoreTxt = `${t.p1.goals}-${t.p2.goals}`;
+    els.score.textContent = `${P1NAME} ${lastScoreTxt} ${P2NAME}`;
+  }
+  if (ev.clock?.seconds != null) els.clock.textContent = String(Math.floor(ev.clock.seconds / 60)).padStart(2, "0") + "'";
+  render(snap);
+  if (ev.action === "game_finalised") showReportCard();
+}
+
+/* ---------- full-time report card ---------- */
+function showReportCard() {
+  if (cardShown) return;
+  cardShown = true;
+  const s = engine.snapshot();
+  const survived = s.state !== "fainted";
+  $("cardScore").textContent = `${P1NAME} ${lastScoreTxt} ${P2NAME}`;
+  $("cardFace").src = spriteURL(SPRITE(survived ? (s.revives > 0 ? "stitched" : "worried") : "broken"));
+  $("stPeak").textContent = peakHR;
+  const danger = hrHistory.length ? Math.round(100 * hrHistory.filter((h) => h >= 120).length / hrHistory.length) : 0;
+  $("stDanger").textContent = danger + "%";
+  $("stBreaks").textContent = s.heartbreaks;
+  $("stRevives").textContent = s.revives;
+  $("cardFate").textContent = survived
+    ? (s.heartbreaks > 0 ? "thanks for holding on." : "a calm heart. rare.")
+    : "it didn't make it. </3";
+  // sparkline of the whole match's heart rate
+  const cv2 = $("cardEkg"), c2 = cv2.getContext("2d");
+  cv2.width = cv2.clientWidth * devicePixelRatio; cv2.height = cv2.clientHeight * devicePixelRatio;
+  c2.strokeStyle = "#2f8f4e"; c2.lineWidth = Math.max(1.2, cv2.height * 0.045);
+  c2.beginPath();
+  const n = hrHistory.length || 1;
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1 || 1)) * (cv2.width - 8) + 4;
+    const y = cv2.height - 6 - ((hrHistory[i] - 40) / 150) * (cv2.height - 12);
+    i ? c2.lineTo(x, y) : c2.moveTo(x, y);
+  }
+  c2.stroke();
+  $("card").classList.add("show");
+}
+
+/* ---------- match chips ---------- */
+async function loadChips() {
+  try {
+    const fixtures = await (await fetch("/fixtures")).json();
+    const now = Date.now();
+    const upcoming = fixtures.filter((f) => f.startTime > now - 3 * 3600e3).slice(0, 3);
+    const chipsEl = $("chips");
+    const short = (n) => n.slice(0, 3).toUpperCase();
+    const mkChip = (label, sub, href, active) => {
+      const d = document.createElement("div");
+      d.className = "chip" + (active ? " active" : "");
+      d.innerHTML = `${label}<small>${sub}</small>`;
+      d.onclick = () => { location.href = href; };
+      chipsEl.appendChild(d);
+    };
+    mkChip("BEL vs SEN", "replay", "?mode=replay&team=" + team, params.get("mode") === "replay");
+    for (const f of upcoming) {
+      const t = new Date(f.startTime);
+      const hh = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      mkChip(`${short(f.p1)} vs ${short(f.p2)}`, f.startTime <= now ? "LIVE" : hh,
+        `?mode=live&fixture=${f.fixtureId}&team=1`,
+        params.get("mode") === "live" && Number(params.get("fixture")) === f.fixtureId);
+    }
+  } catch { /* chips are decoration; fail silent */ }
+}
+loadChips();
+
+async function runReplay() {
+  const txt = await (await fetch("/docs/sample-match-18179550.sse.txt")).text();
+  const events = txt.split("\n").filter((l) => l.startsWith("data: "))
+    .map((l) => { try { return normalizeEvent(JSON.parse(l.slice(6))); } catch { return null; } })
+    .filter(Boolean);
+  els.note.textContent = `replaying ${events.length} real events…`;
+  let prevTs = events[0].ts;
+  for (const ev of events) {
+    const wait = Math.min(4000, Math.max(0, (ev.ts - prevTs) / speed));
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    prevTs = ev.ts;
+    applyEvent(ev);
+  }
+  const s = engine.snapshot();
+  els.note.textContent = s.state === "fainted"
+    ? `full time. died of heartbreak x${s.heartbreaks}. press A.`
+    : `full time. survived ${s.heartbreaks} heartbreak(s), ${s.revives} revive(s).`;
+  showReportCard(); // in case the file lacks a game_finalised event
+}
+
+async function runLive() {
+  const fid = params.get("fixture");
+  if (!fid) { els.note.textContent = "live mode needs ?fixture=<id>"; return; }
+  try {
+    const info = await (await fetch(`/fixture-info?fixtureId=${fid}`)).json();
+    if (info.p1) {
+      P1NAME = info.p1.slice(0, 3).toUpperCase();
+      P2NAME = info.p2.slice(0, 3).toUpperCase();
+      els.score.textContent = `${P1NAME} 0-0 ${P2NAME}`;
+      els.team.textContent = `${(team === 1 ? info.p1 : info.p2).toUpperCase()} (P${team})`;
+      document.getElementById("mode").textContent = `LIVE: ${info.p1.toUpperCase()} vs ${info.p2.toUpperCase()}`;
+      const ko = new Date(info.startTime);
+      els.note.textContent = `LIVE — kickoff ${ko.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · waiting for the feed…`;
+    }
+  } catch { /* names stay generic */ }
+  const es = new EventSource(`/live?fixtureId=${fid}`);
+  es.onmessage = (m) => {
+    try {
+      const ev = normalizeEvent(JSON.parse(m.data));
+      if (ev) applyEvent(ev);
+    } catch { /* heartbeat or junk */ }
+  };
+  es.onerror = () => { els.note.textContent = "live stream reconnecting…"; };
+}
+
+/* ---------- LCD boot flow: no mode param -> pick match + side on-device ---------- */
+const BOOT = !params.get("mode");
+let bootStep = 1, bootIdx = 0, bootSide = 1, bootItems = [];
+async function setupBoot() {
+  $("boot").hidden = false;
+  bootItems = [{ label: "BEL vs SEN", sub: "REPLAY", names: ["BELGIUM", "SENEGAL"],
+                 href: (s) => `?mode=replay&team=${s}` }];
+  try {
+    const fx = await (await fetch("/fixtures")).json();
+    for (const f of fx.filter((x) => x.startTime > Date.now() - 3 * 3600e3).slice(0, 3)) {
+      bootItems.push({
+        label: `${f.p1.slice(0, 3).toUpperCase()} vs ${f.p2.slice(0, 3).toUpperCase()}`,
+        sub: f.startTime <= Date.now() ? "LIVE" : new Date(f.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        names: [f.p1.toUpperCase(), f.p2.toUpperCase()],
+        href: (s) => `?mode=live&fixture=${f.fixtureId}&team=${s}`,
+      });
+    }
+  } catch { /* replay-only menu */ }
+  drawBoot();
+}
+function drawBoot() {
+  $("bootMenu").innerHTML = bootItems.map((it, i) =>
+    `<div class="brow ${i === bootIdx ? "sel" : ""}"><span>${i === bootIdx ? "&gt; " : "&nbsp;&nbsp;"}${it.label}</span><span>${it.sub}</span></div>`
+  ).join("");
+  const sideEl = $("bootSide");
+  if (bootStep === 2) {
+    sideEl.hidden = false;
+    sideEl.textContent = `PICK YOUR SIDE: ◄ ${bootItems[bootIdx].names[bootSide - 1]} ►`;
+    $("bootPrompt").textContent = "B · SWITCH   A · START";
+  } else {
+    sideEl.hidden = true;
+    $("bootPrompt").textContent = "B · MOVE   A · SELECT";
+  }
+}
+function bootB() { bootStep === 1 ? (bootIdx = (bootIdx + 1) % bootItems.length) : (bootSide = 3 - bootSide); drawBoot(); }
+function bootA() { bootStep === 1 ? (bootStep = 2, drawBoot()) : (location.href = bootItems[bootIdx].href(bootSide)); }
+
+if (BOOT) setupBoot();
+else (params.get("mode") === "live" ? runLive : runReplay)();
+</script>
+</body>
+</html>

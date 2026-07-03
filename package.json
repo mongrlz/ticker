@@ -1,0 +1,8 @@
+{
+  "name": "ticker",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A Tamagotchi that lives and dies by your team's World Cup match. Powered by TxLINE.",
+  "scripts": { "start": "node server.mjs", "timeline": "node engine/run-timeline.mjs" },
+  "dependencies": { "@solana/web3.js": "^1.98.4" }
+}
