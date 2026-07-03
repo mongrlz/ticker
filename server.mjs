@@ -120,4 +120,4 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": MIME[path.extname(file)] ?? "application/octet-stream" });
     res.end(data);
   });
-}).listen(PORT, () => console.log(`Ticker server -> http://localhost:${PORT}/track3-consumer/web/`));
+}).listen(PORT, () => console.log(`Ticker server -> http://localhost:${PORT}/web/`));
