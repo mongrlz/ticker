@@ -72,8 +72,14 @@
            font-size: clamp(13px, 3.2vh, 30px); opacity: 0; pointer-events: none; }
   #flash img { height: 38%; image-rendering: pixelated; filter: drop-shadow(0 0 14px rgba(234,255,200,.35)); }
   .hbico { height: .95em; image-rendering: pixelated; vertical-align: -0.08em; margin-right: .35em; }
-  #flash.go { animation: flashIn 2.2s ease-out; }
-  @keyframes flashIn { 0% { opacity: 0; } 8% { opacity: 1; scale: 1.15; } 30% { opacity: 1; scale: 1; } 100% { opacity: 0; } }
+  /* hard-blink, LCD style: instant on, hold, flicker off — pixels don't ease */
+  #flash.go { animation: flashIn 1.7s steps(1, end); }
+  @keyframes flashIn {
+    0% { opacity: 1; } 55% { opacity: 1; }
+    62% { opacity: 0; } 69% { opacity: 1; }
+    76% { opacity: 0; } 83% { opacity: 1; }
+    100% { opacity: 0; }
+  }
   /* contextual button prompt — the screen teaches the buttons, Game Boy style */
   #prompt { position: absolute; left: 0; right: 0; bottom: 26%; text-align: center;
             font-size: clamp(8px, 1.4vh, 13px); color: var(--lcd-ink); z-index: 4;
@@ -299,28 +305,41 @@ const els = { score: $("score"), clock: $("clock"), hr: $("hrnum"), state: $("st
               spd: $("spd"), team: $("teamName"), btnA: $("btnA"), flash: $("flash"), hb: $("hbcount"),
               prompt: $("prompt") };
 
-/* ---------- EKG ---------- */
+/* ---------- EKG: quantized block-trace with oscilloscope wipe (no smoothing) ---------- */
 const cv = $("ekg"), ctx = cv.getContext("2d");
-let ekgX = 0, lastBeatAt = 0, flat = false, prevY = 0, curHR = 70;
-function sizeCanvas() { cv.width = cv.clientWidth * devicePixelRatio; cv.height = cv.clientHeight * devicePixelRatio; prevY = cv.height / 2; }
+let ekgX = 0, lastBeatAt = 0, lastStepAt = 0, flat = false, prevY = null, curHR = 70;
+function sizeCanvas() { cv.width = cv.clientWidth * devicePixelRatio; cv.height = cv.clientHeight * devicePixelRatio; ekgX = 0; prevY = null; }
 sizeCanvas(); addEventListener("resize", sizeCanvas);
 function drawEKG(tms) {
-  const w = cv.width, h = cv.height, mid = h * 0.5;
-  ctx.fillStyle = "rgba(18,22,14,0.16)"; ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = "#eaffc8"; ctx.lineWidth = Math.max(1.5, h * 0.014);
+  requestAnimationFrame(drawEKG);
+  const STEP_MS = 26;                                  // one column per tick — discrete time
+  if (tms - lastStepAt < STEP_MS) return;
+  lastStepAt = tms;
+  const w = cv.width, h = cv.height;
+  const PX = Math.max(2, Math.floor(h / 30));          // chunky pixel size
+  const mid = Math.floor(h / 2 / PX) * PX;
   const beatEvery = 60000 / curHR;
-  let y = mid;
   if (!flat && tms - lastBeatAt > beatEvery) lastBeatAt = tms;
   const ph = (tms - lastBeatAt) / beatEvery;
+  let y = mid;
   if (!flat && ph < 0.18) {
     const k = ph / 0.18;
     y = mid - Math.sin(k * Math.PI) * h * 0.34 * Math.min(1.4, curHR / 110);
     if (ph > 0.12) y = mid + Math.sin((k - 0.66) * Math.PI) * h * 0.1;
   }
-  ctx.beginPath(); ctx.moveTo(ekgX, prevY); ctx.lineTo(ekgX + w * 0.006, y); ctx.stroke();
-  prevY = y; ekgX += w * 0.006;
-  if (ekgX >= w) { ekgX = 0; prevY = mid; }
-  requestAnimationFrame(drawEKG);
+  y = Math.max(0, Math.floor(y / PX) * PX);            // snap to the pixel grid
+  ctx.fillStyle = "#10140c";                           // wipe ahead of the cursor
+  ctx.fillRect(ekgX, 0, PX * 9, h);
+  ctx.fillStyle = "#eaffc8";
+  if (prevY !== null && Math.abs(y - prevY) > PX) {    // vertical run for spikes, in blocks
+    const from = Math.min(y, prevY), to = Math.max(y, prevY);
+    ctx.fillRect(ekgX, from, PX, to - from + PX);
+  } else {
+    ctx.fillRect(ekgX, y, PX, PX);
+  }
+  prevY = y;
+  ekgX += PX;
+  if (ekgX >= w) { ekgX = 0; prevY = null; }
 }
 requestAnimationFrame(drawEKG);
 
