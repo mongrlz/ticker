@@ -80,6 +80,11 @@
     76% { opacity: 0; } 83% { opacity: 1; }
     100% { opacity: 0; }
   }
+  /* arcade ending */
+  #gameover { position: absolute; inset: 0; z-index: 4; display: flex; align-items: center;
+              justify-content: center; font-size: clamp(15px, 3.4vh, 34px); color: var(--lcd-ink);
+              animation: blink 1.1s steps(1) infinite; }
+  #gameover[hidden] { display: none; }
   /* contextual button prompt — the screen teaches the buttons, Game Boy style */
   #prompt { position: absolute; left: 0; right: 0; bottom: 26%; text-align: center;
             font-size: clamp(8px, 1.4vh, 13px); color: var(--lcd-ink); z-index: 4;
@@ -171,6 +176,7 @@
         <canvas id="ekg"></canvas>
         <img id="heart" src="../assets/sprites/worried.png" alt="Ticker" />
         <div id="flash"></div>
+        <div id="gameover" hidden>GAME OVER</div>
       </div>
       <div id="prompt"></div>
       <div id="bottombar"><span id="hrwrap"><span id="hrnum">--</span> <span>BPM</span></span><span id="stateword">BOOT</span></div>
@@ -215,13 +221,15 @@ const SPRITE = (name) => `../assets/sprites/${name}.png`;
 // states with REAL animation frames (assets/sprites/anim/<state>/<n>.png)
 // frames: which files to use (lets us drop off-model frames); mode 'hr' ties
 // the cycle to heart rate (breathing), otherwise fixed ms per full cycle
+// TAMAGOTCHI RULE: 2–3 frames max per state. Real vpets toggled two poses —
+// the visible JUMP between frames is the 8-bit feel; in-betweens kill it.
 const ANIM = {
-  worried:  { frames: [0, 1, 2, 3, 4], mode: "hr" },
-  panic:    { frames: [0, 1, 2, 3, 4], ms: 550 },
-  sleepy:   { frames: [0, 1, 2, 3, 4], ms: 2800 },
-  euphoria: { frames: [0, 1, 4], ms: 850 },
-  stitched: { frames: [0, 1, 2, 3, 4], mode: "hr" },
-  broken:   { frames: [0, 1, 2], ms: 2600 },     // weak dying flicker
+  worried:  { frames: [1, 3], mode: "hr" },
+  panic:    { frames: [0, 2, 4], ms: 600 },
+  sleepy:   { frames: [0, 3], ms: 2800 },
+  euphoria: { frames: [1, 4], ms: 850 },
+  stitched: { frames: [1, 3], mode: "hr" },
+  broken:   { frames: [0, 2], ms: 2600 },        // weak dying flicker
   // dread has NO animation on purpose — the freeze is the drama
 };
 /* ---------- scarf team colors: runtime palette swap ----------
@@ -404,6 +412,7 @@ $("btnB").onclick = () => {
 els.btnA.onclick = async () => {
   initAudio();
   if (BOOT) { blip(740); bootA(); return; }
+  if (gameOver) { blip(180, 0.05); return; } // no reviving the dead after full time
   if (engine.snapshot().state === "fainted") {
     els.prompt.textContent = "PAYING FEE…";
     let sig = null;
@@ -436,8 +445,8 @@ function render(snap) {
   heartEl.className = snap.state === "fainted" ? "dead" : snap.state === "dread" ? "dread" : "";
   flat = snap.state === "dread" || snap.state === "fainted";
   const needsCalm = ["panic", "nervous", "hype"].includes(snap.state) && snap.heartRate >= 140;
-  els.btnA.classList.toggle("alert", snap.state === "fainted" || needsCalm);
-  els.prompt.textContent = snap.state === "fainted" ? "PRESS A · REVIVE"
+  els.btnA.classList.toggle("alert", !gameOver && (snap.state === "fainted" || needsCalm));
+  els.prompt.textContent = gameOver ? "" : snap.state === "fainted" ? "PRESS A · REVIVE"
     : needsCalm ? "A · CALM IT DOWN" : "";
   els.hb.innerHTML = snap.heartbreaks
     ? `<img class="hbico" src="../assets/icons/broken.png" alt="" />x${snap.heartbreaks}` : "";
@@ -465,8 +474,19 @@ function applyEvent(ev) {
   }
   if (ev.clock?.seconds != null) els.clock.textContent = String(Math.floor(ev.clock.seconds / 60)).padStart(2, "0") + "'";
   render(snap);
-  if (ev.action === "game_finalised") showReportCard();
+  if (ev.action === "game_finalised") {
+    if (snap.state === "fainted") { // died at the final whistle: arcade ending
+      gameOver = true;
+      heartEl.style.display = "none";
+      els.prompt.textContent = "";
+      $("gameover").hidden = false;
+      flat = true;
+      breakSound();
+    }
+    showReportCard();
+  }
 }
+let gameOver = false;
 
 /* ---------- full-time report card ---------- */
 function showReportCard() {
