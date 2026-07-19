@@ -1042,12 +1042,22 @@ async function loadChips() {
     const response = await fetch("/fixtures");
     if (!response.ok) throw new Error("fixtures unavailable");
     const fixtures = await response.json();
-    const upcoming = fixtures.filter((f) => f.startTime > now - 3 * 3600e3).slice(0, 3);
+    const seenFixtures = new Set();
+    const upcoming = fixtures
+      .filter((f) => f.startTime > now - 3 * 3600e3)
+      .filter((f) => {
+        const key = [f.p1, f.p2, f.startTime, f.competition].join("|").toLowerCase();
+        if (seenFixtures.has(key)) return false;
+        seenFixtures.add(key);
+        return true;
+      })
+      .slice(0, 3);
     for (const f of upcoming) {
       const t = new Date(f.startTime);
+      const day = t.toLocaleDateString([], { month: "short", day: "numeric" }).toUpperCase();
       const hh = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       const live = f.startTime <= now;
-      mkChip(`${short(f.p1)} vs ${short(f.p2)}`, `${f.competition || "WORLD CUP"} · ${live ? "IN PROGRESS" : hh}`,
+      mkChip(`${short(f.p1)} vs ${short(f.p2)}`, `${f.competition || "WORLD CUP"} · ${live ? "IN PROGRESS" : `${day} ${hh}`}`,
         live ? "LIVE" : "UPCOMING",
         `?mode=live&fixture=${f.fixtureId}&team=1`,
         params.get("mode") === "live" && Number(params.get("fixture")) === f.fixtureId);
