@@ -4,6 +4,8 @@
 
 **A MONGRLZ project.**
 
+**Live demo:** [ticker.mongrlz.dev](https://ticker.mongrlz.dev/web/) · **Network:** Solana Devnet · **Hackathon track:** Consumer & Fan Experiences
+
 Your team plays. Your heart takes the damage. Don't let it break.
 
 Ticker is a virtual pet whose heartbeat is wired to a live football match via
@@ -16,6 +18,29 @@ Every state is real frame-animated pixel art inside a photoreal heart-shaped han
 The scarf dyes itself to your team's colors. The VAR review freezes its heart mid-beat.
 
 > Hackathon work-in-progress (Superteam × TxODDS World Cup hackathon, Consumer & Fan track).
+
+## Why TxLINE matters
+
+Ticker turns TxLINE's live event stream into the pet's physiology. Match danger, cards, goals,
+VAR, stoppages, and the final whistle drive a deterministic heart-state machine instead of a
+generic score widget. The feed changes the character's BPM, animation, dialogue, risk meter, and
+report card in real time; player interventions happen through the game controls and wallet-signed
+Devnet revives.
+
+## Architecture and stack
+
+| Layer | Technology | Responsibility |
+| --- | --- | --- |
+| Device UI | HTML, CSS, browser JavaScript | Broadcast-style handheld, sprite animation, controls |
+| Heart engine | Deterministic JavaScript state machine | BPM, overload, calm cooldown, break, revive, report |
+| TxLINE adapter | Node.js, SSE, replay driver | Credentials, reconnects, normalization, live/replay parity |
+| Wallet flow | Wallet Standard-compatible injected wallet, Solana Web3 | Player-signed 0.001 Devnet SOL revive proof |
+| Art pipeline | Generated concepts and hand-integrated pixel frames | Team-reactive pet, scarf, expressions, device states |
+
+```text
+TxLINE -> server-only adapter -> normalized match events -> heart engine -> pixel device UI
+Wallet -------------------------------------------------------> verified Devnet revive
+```
 
 ## Run it
 
@@ -64,3 +89,26 @@ configured. The only on-chain action is initiated and approved by the connected 
 `engine/` — Ticker's brain: match events → heart state machine (8 states, cardiac
 overload, calm cooldown, revive) · `web/` — the device: one page, zero build step ·
 `scripts/` — art pipeline (AI concept → true-pixel sprites → PixelLab frame animation)
+
+## Verification
+
+```bash
+npm test
+npm start
+```
+
+Replay mode is the deterministic judge path and requires no private credential or wallet. Live mode
+uses server-side TxLINE credentials; the wallet is requested only if the pet breaks and the player
+chooses to revive it.
+
+## Development tools and credits
+
+Ticker was built by MONGRLZ with AI-assisted engineering support from **OpenAI Codex** and
+**Anthropic Claude Code**. They were used for concept development, implementation assistance,
+code review, testing, debugging, documentation, visual exploration, and UI iteration. All generated
+work and visual assets were reviewed, selected, integrated, and tested by the project owner.
+TxLINE supplies the live football data, and Solana Devnet supplies the player-signed revive proof.
+
+## License
+
+Hackathon prototype. No mainnet funds are required or accepted.
