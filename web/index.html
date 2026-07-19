@@ -179,7 +179,13 @@
     --blue: #1556c9;
     --green: #2e9a55;
   }
-  html { max-width: 100%; overflow-x: hidden; background: var(--paper); }
+  html {
+    max-width: 100%; overflow-x: hidden; background: var(--paper);
+    scrollbar-width: thin; scrollbar-color: var(--red) #dfd9ce;
+  }
+  html::-webkit-scrollbar { width: 10px; }
+  html::-webkit-scrollbar-track { background: #dfd9ce; }
+  html::-webkit-scrollbar-thumb { background: var(--red); border: 2px solid #dfd9ce; border-radius: 999px; }
   body {
     min-height: 100dvh; height: auto; display: block; overflow-x: hidden; overflow-y: auto;
     color: var(--ink); background:
@@ -264,15 +270,23 @@
   .sectionHead { display: flex; justify-content: space-between; align-items: end; margin-bottom: 10px; }
   .sectionKicker { color: var(--red); font: 700 8px/1 "Press Start 2P", monospace; }
   .sectionHead h2 { margin-top: 5px; font: 800 clamp(18px, 1.8vw, 26px)/1 Impact, "Arial Narrow", sans-serif; letter-spacing: .03em; text-transform: uppercase; }
+  .deckMeta { display: flex; align-items: center; gap: 14px; }
   #deckStatus { color: var(--muted); font: 700 7px/1 "Press Start 2P", monospace; }
-  #chips { position: static; width: 100%; display: grid; grid-template-columns: repeat(4, minmax(210px, 1fr)); justify-content: stretch; gap: 12px; overflow-x: auto; padding: 0 0 6px; scrollbar-width: thin; }
-  .chip { position: relative; min-height: 100px; padding: 13px 18px; border: 1px solid #c7c2b8; border-radius: 8px; background: var(--paper-2); color: var(--ink); cursor: pointer; text-align: left; line-height: 1.4; box-shadow: 0 6px 15px rgba(52,36,24,.08); transition: transform .2s ease, border-color .2s ease; }
+  #deckControls { display: none; align-items: center; gap: 7px; }
+  #deckControls button { width: 38px; height: 38px; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper-2); color: var(--red); box-shadow: 0 3px 0 var(--ink); cursor: pointer; font: 800 20px/1 ui-monospace, "SF Mono", monospace; transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease; }
+  #deckControls button:hover:not(:disabled) { border-color: var(--red); }
+  #deckControls button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+  #deckControls button:disabled { opacity: .3; cursor: not-allowed; box-shadow: none; }
+  #deckIndex { min-width: 48px; color: var(--ink); text-align: center; font: 700 7px/1 "Press Start 2P", monospace; }
+  #chips { position: static; width: 100%; display: grid; grid-template-columns: repeat(4, minmax(210px, 1fr)); justify-content: stretch; gap: 12px; overflow-x: auto; overscroll-behavior-inline: contain; padding: 0; scrollbar-width: none; scroll-behavior: smooth; }
+  #chips::-webkit-scrollbar { display: none; }
+  .chip { position: relative; min-width: 0; min-height: 100px; overflow: hidden; padding: 13px 18px; border: 1px solid #c7c2b8; border-radius: 8px; background: var(--paper-2); color: var(--ink); cursor: pointer; text-align: left; line-height: 1.4; box-shadow: 0 6px 15px rgba(52,36,24,.08); transition: transform .2s ease, border-color .2s ease; }
   .chip:hover { transform: translateY(-3px); border-color: var(--red); }
   .chip:active { transform: translateY(1px); }
   .chip.active { background: var(--paper-2); border: 2px solid var(--red); color: var(--ink); }
   .chip::before { content: attr(data-status); display: inline-block; margin-bottom: 13px; color: var(--blue); font: 700 7px/1 "Press Start 2P", monospace; }
   .chip.active::before { color: var(--red); }
-  .chip strong { display: block; font: 700 clamp(10px, .9vw, 13px)/1.4 "Press Start 2P", monospace; }
+  .chip strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 clamp(10px, .9vw, 13px)/1.4 "Press Start 2P", monospace; }
   .chip small { display: block; margin-top: 8px; color: var(--muted); font: 700 7px/1.4 "Press Start 2P", monospace; }
   .chip .chipAction { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 18px; border-top: 1px solid #ddd7cc; color: var(--blue); font: 700 6px/1 "Press Start 2P", monospace; }
   .chip.active .chipAction { color: white; background: var(--red); }
@@ -311,7 +325,9 @@
     .riskGrid { grid-template-columns: 1fr; }
     .riskMeter { display: none; }
     .riskCopy h1 { font-size: clamp(36px, 5vw, 58px); }
-    #chips { grid-template-columns: repeat(4, 250px); }
+    #deckControls { display: flex; }
+    #chips { display: flex; scroll-snap-type: x mandatory; }
+    .chip { flex: 0 0 min(360px, 47vw); scroll-snap-align: start; scroll-snap-stop: always; }
     #broadcastFooter { grid-template-columns: repeat(3, 1fr); }
     #broadcastFooter .powered { display: none; }
   }
@@ -335,10 +351,13 @@
     .riskReading strong { font-size: 38px; }
     #riskState { min-width: 0; width: 100%; font-size: 11px; }
     #matchDeck { margin-top: 6px; }
-    .sectionHead { align-items: start; }
+    .sectionHead { align-items: start; gap: 14px; }
     #deckStatus { display: none; }
-    #chips { display: flex; scroll-snap-type: x mandatory; }
-    .chip { flex: 0 0 82vw; scroll-snap-align: start; }
+    .deckMeta { flex: 0 0 auto; }
+    #deckControls button { width: 40px; height: 40px; }
+    #deckIndex { min-width: 42px; font-size: 6px; }
+    #chips { gap: 10px; }
+    .chip { flex-basis: 100%; width: 100%; }
     #broadcastFooter { grid-template-columns: repeat(3, 1fr); margin-top: 12px; }
     #broadcastFooter button { justify-content: center; min-height: 48px; }
     #broadcastFooter button span { display: none; }
@@ -430,7 +449,17 @@
     </main>
 
     <section id="matchDeck" aria-labelledby="matchDeckTitle">
-      <div class="sectionHead"><div><span class="sectionKicker">MATCH DESK</span><h2 id="matchDeckTitle">Choose what Ticker lives through.</h2></div><span id="deckStatus">REAL MATCH DATA · PAPER PLAY</span></div>
+      <div class="sectionHead">
+        <div><span class="sectionKicker">MATCH DESK</span><h2 id="matchDeckTitle">Choose what Ticker lives through.</h2></div>
+        <div class="deckMeta">
+          <span id="deckStatus">REAL MATCH DATA · PAPER PLAY</span>
+          <div id="deckControls" aria-label="Fixture carousel controls">
+            <button id="deckPrev" type="button" aria-label="Previous fixture">←</button>
+            <span id="deckIndex" aria-live="polite">1 / 1</span>
+            <button id="deckNext" type="button" aria-label="Next fixture">→</button>
+          </div>
+        </div>
+      </div>
       <div id="chips"></div>
     </section>
 
@@ -958,6 +987,43 @@ $("copyReport").onclick = async () => {
 };
 
 /* ---------- match chips ---------- */
+function setupDeckNavigation() {
+  const rail = $("chips");
+  const cards = [...rail.querySelectorAll(".chip")];
+  const prev = $("deckPrev");
+  const next = $("deckNext");
+  const index = $("deckIndex");
+  if (!cards.length) return;
+
+  let current = Math.max(0, cards.findIndex((card) => card.classList.contains("active")));
+  let scrollFrame = 0;
+  const cardLeft = (card) => card.offsetLeft - rail.offsetLeft;
+  const update = () => {
+    index.textContent = `${current + 1} / ${cards.length}`;
+    prev.disabled = current === 0;
+    next.disabled = current === cards.length - 1;
+  };
+  const goTo = (target, behavior = "smooth") => {
+    current = Math.max(0, Math.min(cards.length - 1, target));
+    rail.scrollTo({ left: cardLeft(cards[current]), behavior });
+    update();
+  };
+
+  prev.onclick = () => goTo(current - 1);
+  next.onclick = () => goTo(current + 1);
+  rail.addEventListener("scroll", () => {
+    cancelAnimationFrame(scrollFrame);
+    scrollFrame = requestAnimationFrame(() => {
+      current = cards.reduce((closest, card, cardIndex) =>
+        Math.abs(cardLeft(card) - rail.scrollLeft) < Math.abs(cardLeft(cards[closest]) - rail.scrollLeft)
+          ? cardIndex : closest, 0);
+      update();
+    });
+  }, { passive: true });
+  window.addEventListener("resize", () => goTo(current, "auto"));
+  goTo(current, "auto");
+}
+
 async function loadChips() {
   const chipsEl = $("chips");
   const now = Date.now();
@@ -989,6 +1055,8 @@ async function loadChips() {
     $("deckStatus").textContent = `${upcoming.filter((f) => f.startTime <= now).length} LIVE · TxLINE FIXTURES`;
   } catch {
     $("deckStatus").textContent = "REPLAY READY · LIVE FEED OFFLINE";
+  } finally {
+    setupDeckNavigation();
   }
 }
 loadChips();
