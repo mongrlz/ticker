@@ -1,5 +1,5 @@
 # TICKER — Track 3 Checklist (2026-07-03)
-Status: **game feature-complete (~75%)** · gameplay FEATURE-FREEZE in effect —
+Status: **game feature-complete (~88%)** · gameplay FEATURE-FREEZE in effect —
 remaining work is submission plumbing + polish only. Final touches reserved for
 the last 5–10 days per plan.
 
@@ -8,7 +8,8 @@ the last 5–10 days per plan.
 - [x] Care verbs: CALM (15s cooldown, anti-spam) + REVIVE (real devnet fee tx)
 - [x] Stakes: goals-against faint · cardiac overload (unattended redline = death)
 - [x] Character: 7 states, real frame animation, Tamagotchi 2-frame motion rule
-- [x] Team-color scarf system (both stripe colors, runtime palette swap, all 48 teams)
+- [x] Team-color scarf system (both stripe colors, runtime palette swap, current
+      TxLINE fixture countries plus a neutral fallback)
 - [x] Device: photoreal shell, translucent glass screen, clickable A/B/speaker buttons
 - [x] LCD authenticity: pixel font, hard-step animations, quantized block EKG w/ wipe,
       pixel icons (no emojis), scanlines, VAR freeze, GAME OVER arcade ending
@@ -20,15 +21,17 @@ the last 5–10 days per plan.
 - [x] Repo: github.com/mongrlz/ticker (private until submission)
 
 ## 🔲 REMAINING — submission checklist
-- [ ] **Wallet sign-in (RULES ITEM)** — listing requires users "sign up through Solana".
-      Phantom connect → address in the wallet pill, gate the start moment. (~0.5d)
+- [x] **Wallet sign-in (RULES ITEM)** — Phantom/Solflare connection, connected
+      address in the wallet control, player-signed devnet revive, server proof verification.
 - [ ] **Deploy to public URL** — James's Hetzner VPS. Node server + env secrets
-      (.txline-token.json, .devnet-keypair.json), domain/port, keep-alive. (~0.5d)
+      (TXLINE_BASE, TXLINE_JWT, TXLINE_API_TOKEN), domain/port, keep-alive. (~0.5d)
 - [ ] **Demo video ≤5 min** — THE screening gate. Script → screen capture (replay +
       live if a match cooperates) → HyperFrames wrap. (~1–2d, near deadline is fine)
-- [ ] **Share/save button** on report card (render card to PNG download). (small)
-- [ ] **Mobile pass** — track brief literally says "phone in their hand". (small-med)
-- [ ] **Tech doc** — README covers ~70%; add endpoint list + business highlights. (small)
+- [ ] **Share/save button** on report card (copyable report is done; add PNG download). (small)
+- [x] **Mobile pass** — responsive single-column broadcast layout, horizontal fixture rail,
+      no horizontal page overflow.
+- [x] **Tech doc** — README includes local/hosted configuration, app endpoints,
+      TxLINE inputs, wallet signing, and proof verification.
 - [ ] **API feedback section** — package the friction log from docs/txline-findings.md. (small)
 - [ ] Flip repo public + submit on Superteam Earn.
 

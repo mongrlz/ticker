@@ -10,10 +10,21 @@ import { TxLineClient } from "./lib/txline/index.mjs";
 
 const ROOT = import.meta.dirname;
 const PORT = 8777;
+const SOLANA_RPC = "https://api.devnet.solana.com";
+const REVIVE_LAMPORTS = 1_000_000;
+const REVIVE_TREASURY = "Eqqd7rZQGzn2HA9L11NwBMhknxArM3L4KETyUuujK3LB";
 // Live mode needs a TxLINE token (see README). Replay mode works without one.
 let client = null;
-try { client = TxLineClient.fromTokenFile(path.join(ROOT, ".txline-token.json")); }
-catch { console.warn("no .txline-token.json — live endpoints disabled, replay mode works"); }
+if (process.env.TXLINE_BASE && process.env.TXLINE_JWT && process.env.TXLINE_API_TOKEN) {
+  client = new TxLineClient({
+    base: process.env.TXLINE_BASE,
+    jwt: process.env.TXLINE_JWT,
+    apiToken: process.env.TXLINE_API_TOKEN,
+  });
+} else {
+  try { client = TxLineClient.fromTokenFile(path.join(ROOT, ".txline-token.json")); }
+  catch { console.warn("no TxLINE environment variables or .txline-token.json — live endpoints disabled, replay mode works"); }
+}
 const needClient = (res) => {
   if (client) return false;
   res.writeHead(503, { "Content-Type": "application/json" });
@@ -52,23 +63,44 @@ http.createServer(async (req, res) => {
     return;
   }
 
-  // devnet revive fee: a REAL on-chain transfer (0.001 devnet SOL) from the app
-  // wallet to the treasury — verifiable on explorer, no browser wallet needed.
+  if (url.pathname === "/wallet-config") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({
+      network: "devnet",
+      rpc: SOLANA_RPC,
+      treasury: REVIVE_TREASURY,
+      reviveLamports: REVIVE_LAMPORTS,
+    }));
+    return;
+  }
+
+  // The browser wallet signs and sends the revive transaction. The server only
+  // verifies that the confirmed devnet transfer paid the expected treasury.
   if (url.pathname === "/revive-fee" && req.method === "POST") {
     try {
-      const { createRequire } = await import("node:module");
-      const require = createRequire(path.join(ROOT, "package.json"));
-      const { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } = require("@solana/web3.js");
-      const kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(path.join(ROOT, ".devnet-keypair.json"), "utf8"))));
-      const conn = new Connection("https://api.devnet.solana.com", "confirmed");
-      const TREASURY = new PublicKey("Eqqd7rZQGzn2HA9L11NwBMhknxArM3L4KETyUuujK3LB"); // txoracle token_treasury_v2 PDA
-      const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: kp.publicKey, toPubkey: TREASURY, lamports: 1_000_000 }));
-      const signature = await sendAndConfirmTransaction(conn, tx, [kp]);
-      console.log("[revive-fee] paid:", signature);
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const { signature, wallet } = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+      if (!signature || !wallet) throw new Error("signature and wallet are required");
+
+      const { Connection } = await import("@solana/web3.js");
+      const conn = new Connection(SOLANA_RPC, "confirmed");
+      const tx = await conn.getParsedTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+      if (!tx || tx.meta?.err) throw new Error("transaction is not confirmed");
+      const paid = tx.transaction.message.instructions.some((ix) => {
+        const info = ix?.parsed?.info;
+        return ix?.parsed?.type === "transfer"
+          && info?.source === wallet
+          && info?.destination === REVIVE_TREASURY
+          && Number(info?.lamports) === REVIVE_LAMPORTS;
+      });
+      if (!paid) throw new Error("revive transfer does not match the required payment");
+
+      console.log("[revive-fee] verified:", signature);
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ signature, lamports: 1_000_000 }));
+      res.end(JSON.stringify({ verified: true, signature, lamports: REVIVE_LAMPORTS }));
     } catch (e) {
-      res.writeHead(502, { "Content-Type": "application/json" });
+      res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: String(e.message) }));
     }
     return;
