@@ -2,6 +2,8 @@
 
 **A Tamagotchi that lives and dies by your team's World Cup match.**
 
+**A MONGRLZ project.**
+
 Your team plays. Your heart takes the damage. Don't let it break.
 
 Ticker is a virtual pet whose heartbeat is wired to a live football match via

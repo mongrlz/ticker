@@ -1,6 +1,7 @@
 {
   "name": "ticker",
   "version": "0.1.0",
+  "author": "MONGRLZ",
   "type": "module",
   "description": "A Tamagotchi that lives and dies by your team's World Cup match. Powered by TxLINE.",
   "scripts": {
