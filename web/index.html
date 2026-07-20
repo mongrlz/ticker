@@ -238,7 +238,7 @@
   .heartOutline::before, .riskHeart::before { left: -3px; top: -8px; border-bottom: 0; border-right: 0; }
   .heartOutline::after, .riskHeart::after { right: -8px; bottom: -3px; border-top: 0; border-left: 0; }
 
-  #broadcastMain { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(330px, .75fr); gap: clamp(20px, 3vw, 48px); align-items: center; min-height: 0; height: 464px; }
+  #broadcastMain { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(330px, .75fr); gap: clamp(20px, 3vw, 48px); align-items: center; min-height: 540px; height: auto; }
   #deviceBay { position: relative; min-width: 0; display: grid; place-items: center; align-content: center; }
   .ambientEkg { position: absolute; inset: 15% -6% 12%; opacity: .26; pointer-events: none; background: center/100% 100% no-repeat url("data:image/svg+xml,%3Csvg viewBox='0 0 1000 250' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 135h90l24-40 35 105 54-170 48 170 41-65h104l38-45 34 90 63-130 66 150 44-65h399' fill='none' stroke='%23cc302d' stroke-width='4'/%3E%3C/svg%3E"); }
   #device { position: relative; height: min(53vh, 580px); max-height: 100%; aspect-ratio: 1536 / 1024; margin: 0; filter: saturate(1.05); animation: deviceEnter .65s cubic-bezier(.2,.8,.2,1) both; }
@@ -247,7 +247,7 @@
   #deviceCaption { z-index: 7; margin-top: -10px; display: flex; justify-content: center; gap: 24px; color: var(--muted); font: 700 clamp(7px, .7vw, 9px)/1.5 "Press Start 2P", monospace; text-align: center; }
   #deviceCaption button { border: 0; border-bottom: 2px solid var(--red); padding: 2px 0; background: none; color: var(--red); font: inherit; cursor: pointer; }
 
-  #riskPanel { align-self: stretch; min-height: 360px; margin-block: 16px; padding: clamp(18px, 1.7vw, 26px); border: 2px solid var(--red); border-radius: 10px; background: rgba(255,253,247,.78); box-shadow: inset 0 1px 0 #fff, 0 16px 34px rgba(77,45,30,.09); display: flex; flex-direction: column; }
+  #riskPanel { align-self: stretch; min-height: 0; margin-block: 0; padding: clamp(18px, 1.7vw, 26px); border: 2px solid var(--red); border-radius: 10px; background: rgba(255,253,247,.78); box-shadow: inset 0 1px 0 #fff, 0 16px 34px rgba(77,45,30,.09); display: flex; flex-direction: column; overflow: hidden; }
   .panelEyebrow { display: flex; align-items: center; gap: 10px; padding-bottom: 18px; border-bottom: 1px solid var(--line); color: var(--red); font: 700 8px/1 "Press Start 2P", monospace; }
   .panelEyebrow #riskFeed { margin-left: auto; color: var(--muted); font-size: 6px; }
   .riskGrid { flex: 1; display: grid; grid-template-columns: 1.4fr .75fr; gap: 18px; padding-top: 16px; }
@@ -266,10 +266,12 @@
   .meterScale span:nth-child(-n+3) { color: var(--red); }
   .controlLegend { display: flex; gap: 20px; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); font: 700 8px/1.4 "Press Start 2P", monospace; }
   .controlLegend b { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 5px; color: white; background: var(--red); border-radius: 50%; }
-  .reportButton { width: 100%; margin-top: 12px; min-height: 42px; border: 2px solid var(--blue); border-radius: 6px; background: transparent; color: var(--blue); font: 700 8px/1 "Press Start 2P", monospace; cursor: pointer; }
+  .reportButton { flex: 0 0 auto; width: 100%; margin-top: 12px; min-height: 42px; border: 2px solid var(--blue); border-radius: 6px; background: transparent; color: var(--blue); font: 700 8px/1 "Press Start 2P", monospace; cursor: pointer; transition: color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+  .reportButton:hover:not(:disabled) { color: white; background: var(--blue); box-shadow: inset 0 2px 0 rgba(255,255,255,.28); }
+  .reportButton:active:not(:disabled) { transform: translateY(1px); }
   .reportButton:disabled { border-color: var(--line); color: #aaa79d; cursor: not-allowed; }
 
-  #matchDeck { border-top: 2px solid var(--ink); padding-top: 14px; }
+  #matchDeck { position: relative; isolation: isolate; border-top: 2px solid var(--ink); padding-top: 14px; }
   .sectionHead { display: flex; justify-content: space-between; align-items: end; margin-bottom: 10px; }
   .sectionKicker { color: var(--red); font: 700 8px/1 "Press Start 2P", monospace; }
   .sectionHead h2 { margin-top: 5px; font: 800 clamp(18px, 1.8vw, 26px)/1 Impact, "Arial Narrow", sans-serif; letter-spacing: .03em; text-transform: uppercase; }
@@ -281,10 +283,10 @@
   #deckControls button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
   #deckControls button:disabled { opacity: .3; cursor: not-allowed; box-shadow: none; }
   #deckIndex { min-width: 48px; color: var(--ink); text-align: center; font: 700 7px/1 "Press Start 2P", monospace; }
-  #chips { position: static; width: 100%; display: grid; grid-template-columns: repeat(4, minmax(210px, 1fr)); justify-content: stretch; gap: 12px; overflow-x: auto; overscroll-behavior-inline: contain; padding: 0; scrollbar-width: none; scroll-behavior: smooth; }
+  #chips { position: static; width: 100%; display: grid; grid-template-columns: repeat(4, minmax(210px, 1fr)); justify-content: stretch; gap: 12px; overflow-x: auto; overscroll-behavior-inline: contain; padding: 4px 0 2px; scrollbar-width: none; scroll-behavior: smooth; }
   #chips::-webkit-scrollbar { display: none; }
   .chip { position: relative; min-width: 0; min-height: 100px; overflow: hidden; padding: 13px 18px; border: 1px solid #c7c2b8; border-radius: 8px; background: var(--paper-2); color: var(--ink); cursor: pointer; text-align: left; line-height: 1.4; box-shadow: 0 6px 15px rgba(52,36,24,.08); transition: transform .2s ease, border-color .2s ease; }
-  .chip:hover { transform: translateY(-3px); border-color: var(--red); }
+  .chip:hover { transform: none; border-color: var(--red); box-shadow: inset 0 2px 0 rgba(204,48,45,.12), 0 8px 18px rgba(52,36,24,.1); }
   .chip:active { transform: translateY(1px); }
   .chip.active { background: var(--paper-2); border: 2px solid var(--red); color: var(--ink); }
   .chip::before { content: attr(data-status); display: inline-block; margin-bottom: 13px; color: var(--blue); font: 700 7px/1 "Press Start 2P", monospace; }
